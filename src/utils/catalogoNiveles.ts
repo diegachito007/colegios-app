@@ -1,0 +1,48 @@
+// src/utils/catalogoNiveles.ts
+
+export const CATALOGO_NIVELES = {
+  EGB: [
+    'Inicial 1', 'Inicial 2', '1ro EGB',
+    '2do EGB', '3ro EGB', '4to EGB', '5to EGB', '6to EGB', '7mo EGB',
+    '8vo EGB', '9no EGB', '10mo EGB',
+  ],
+  BACHILLERATO_CIENCIAS: [
+    '1ro BC', '2do BC', '3ro BC',
+  ],
+  BACHILLERATO_TECNICO: [
+    // Catálogo antiguo (figuras profesionales)
+    '1ro BT - Contabilidad', '2do BT - Contabilidad', '3ro BT - Contabilidad',
+    '1ro BT - Administración de Sistemas', '2do BT - Administración de Sistemas', '3ro BT - Administración de Sistemas',
+    '1ro BT - Mecatrónica', '2do BT - Mecatrónica', '3ro BT - Mecatrónica',
+    '1ro BT - Electrónica de Consumo', '2do BT - Electrónica de Consumo', '3ro BT - Electrónica de Consumo',
+    '1ro BT - Instalaciones, Equipos y Máquinas Eléctricas', '2do BT - Instalaciones, Equipos y Máquinas Eléctricas', '3ro BT - Instalaciones, Equipos y Máquinas Eléctricas',
+    '1ro BT - Electromecánica Automotriz', '2do BT - Electromecánica Automotriz', '3ro BT - Electromecánica Automotriz',
+    '1ro BT - Mecanizado y Construcciones Metálicas', '2do BT - Mecanizado y Construcciones Metálicas', '3ro BT - Mecanizado y Construcciones Metálicas',
+    '1ro BT - Informática', '2do BT - Informática', '3ro BT - Informática',
+    '1ro BT - Organización y Gestión de la Secretaría', '2do BT - Organización y Gestión de la Secretaría', '3ro BT - Organización y Gestión de la Secretaría',
+    '1ro BT - Comercialización y Ventas', '2do BT - Comercialización y Ventas', '3ro BT - Comercialización y Ventas',
+    '1ro BT - Servicios Hoteleros', '2do BT - Servicios Hoteleros', '3ro BT - Servicios Hoteleros',
+    '1ro BT - Ventas e Información Turística', '2do BT - Ventas e Información Turística', '3ro BT - Ventas e Información Turística',
+    '1ro BT - Producción Agropecuaria', '2do BT - Producción Agropecuaria', '3ro BT - Producción Agropecuaria',
+    '1ro BT - Industrialización de Productos Alimenticios', '2do BT - Industrialización de Productos Alimenticios', '3ro BT - Industrialización de Productos Alimenticios',
+    '1ro BT - Industria Textil', '2do BT - Industria Textil', '3ro BT - Industria Textil',
+    '1ro BT - Industria de la Confección', '2do BT - Industria de la Confección', '3ro BT - Industria de la Confección',
+    '1ro BT - Diseño Gráfico', '2do BT - Diseño Gráfico', '3ro BT - Diseño Gráfico',
+    '1ro BT - Escultura y Arte Gráfico', '2do BT - Escultura y Arte Gráfico', '3ro BT - Escultura y Arte Gráfico',
+    '1ro BT - Pintura y Cerámica', '2do BT - Pintura y Cerámica', '3ro BT - Pintura y Cerámica',
+    '1ro BT - Música', '2do BT - Música', '3ro BT - Música',
+    '1ro BT - Arte de los Pueblos y Nacionalidades', '2do BT - Arte de los Pueblos y Nacionalidades', '3ro BT - Arte de los Pueblos y Nacionalidades',
+    '1ro BT - Ebanistería', '2do BT - Ebanistería', '3ro BT - Ebanistería',
+    '1ro BT - Fabricación y Montaje de Muebles', '2do BT - Fabricación y Montaje de Muebles', '3ro BT - Fabricación y Montaje de Muebles',
+    '1ro BT - Chapistería y Pintura', '2do BT - Chapistería y Pintura', '3ro BT - Chapistería y Pintura',
+    '1ro BT - Climatización', '2do BT - Climatización', '3ro BT - Climatización',
+    '1ro BT - Cultivo de Peces, Moluscos y Crustáceos', '2do BT - Cultivo de Peces, Moluscos y Crustáceos', '3ro BT - Cultivo de Peces, Moluscos y Crustáceos',
+    '1ro BT - Conservación y Manejo de Recursos Naturales', '2do BT - Conservación y Manejo de Recursos Naturales', '3ro BT - Conservación y Manejo de Recursos Naturales',
+    '1ro BT - Deportes de Equipo', '2do BT - Deportes de Equipo', '3ro BT - Deportes de Equipo',
+    '1ro BT - Promotor en Recreación y Deportes', '2do BT - Promotor en Recreación y Deportes', '3ro BT - Promotor en Recreación y Deportes',
+    '1ro BT - Aplicación de Proyectos de Construcción', '2do BT - Aplicación de Proyectos de Construcción', '3ro BT - Aplicación de Proyectos de Construcción',
+    '1ro BT - Cerámica', '2do BT - Cerámica', '3ro BT - Cerámica',
+    '1ro BT - Calzado y Marroquinería', '2do BT - Calzado y Marroquinería', '3ro BT - Calzado y Marroquinería',
+    '1ro BT - Comercio Exterior', '2do BT - Comercio Exterior', '3ro BT - Comercio Exterior',
+  ],
+};
