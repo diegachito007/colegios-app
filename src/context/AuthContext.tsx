@@ -1,10 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useEffect, useState, useCallback } from "react";
+import { createContext, useEffect, useState, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface UserProfile {
+  codigo_amie: string | undefined;
+  colegio_nombre: string | undefined;
   id: string;
   rol:
     | "super_admin"
@@ -36,6 +39,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const queryClient = useQueryClient();
+  const lastUserId = useRef<string | null>(null);
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     try {
@@ -75,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
+      lastUserId.current = session?.user?.id ?? null;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -86,7 +93,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextId = session?.user?.id ?? null;
+
+      // Limpiar caché si se cierra sesión o cambia el usuario (evita que el
+      // siguiente usuario vea datos cacheados del colegio anterior)
+      if (
+        event === "SIGNED_OUT" ||
+        (lastUserId.current && nextId && lastUserId.current !== nextId)
+      ) {
+        queryClient.clear();
+      }
+      lastUserId.current = nextId;
+
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -99,9 +118,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, queryClient]);
 
-  // ✅ Realtime: si el admin cambia MI rol, refresco mi perfil al instante
+  // Realtime: si el admin cambia MI rol, refresco mi perfil al instante
   useEffect(() => {
     if (!user?.id) return;
 
@@ -154,6 +173,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const colegio = colegioData as { activo: boolean } | null;
 
           if (colegio && !colegio.activo) {
+            // Cerrar sesión para no dejar al usuario autenticado sin colegio
+            await supabase.auth.signOut();
             return {
               error: new Error("El colegio al que perteneces está inactivo."),
             };
@@ -169,6 +190,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    queryClient.clear();
     setProfile(null);
   };
 

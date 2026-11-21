@@ -23,7 +23,6 @@ import {
   Trash2,
   Star,
   Pencil,
-  UserPen, // ✅ Icono para editar nombre
 } from "lucide-react";
 import { invitacionesService } from "../../../services/invitacionesService";
 
@@ -49,6 +48,7 @@ export default function GestionPersonal() {
     nombres: "",
     email: "",
     rol: "docente",
+    area_director: "",
   });
   const [gradosNuevo, setGradosNuevo] = useState<
     { gradoId: string; esTutor: boolean }[]
@@ -66,26 +66,21 @@ export default function GestionPersonal() {
   const [gradosEditar, setGradosEditar] = useState<
     { gradoId: string; esTutor: boolean }[]
   >([]);
+  const [isLoadingGradosEditar, setIsLoadingGradosEditar] = useState(false);
   const [isSavingGrados, setIsSavingGrados] = useState(false);
 
-  // Estados para Editar Rol
-  const [personalAEditarRol, setPersonalAEditarRol] = useState<{
+  // Estados para el Modal Unificado (Editar Datos)
+  const [personalAEditarDatos, setPersonalAEditarDatos] = useState<{
     id: string;
-    nombre: string;
     rolActual: string;
     cargoActual: string | null;
-  } | null>(null);
-  const [nuevoRol, setNuevoRol] = useState("");
-  const [nuevoCargo, setNuevoCargo] = useState("");
-  const [isSavingRol, setIsSavingRol] = useState(false);
-
-  // ✅ NUEVOS Estados para Editar Nombre
-  const [personalAEditarNombre, setPersonalAEditarNombre] = useState<{
-    id: string;
-    nombreActual: string;
+    areaActual: string | null;
   } | null>(null);
   const [nuevoNombre, setNuevoNombre] = useState("");
-  const [isSavingNombre, setIsSavingNombre] = useState(false);
+  const [nuevoRol, setNuevoRol] = useState("");
+  const [nuevoCargo, setNuevoCargo] = useState("");
+  const [nuevoAreaDirector, setNuevoAreaDirector] = useState("");
+  const [isSavingDatos, setIsSavingDatos] = useState(false);
 
   // Estados para Eliminar
   const [personalAEliminar, setPersonalAEliminar] = useState<{
@@ -93,28 +88,48 @@ export default function GestionPersonal() {
     nombre: string;
   } | null>(null);
 
+  // ✅ EFECTO CORREGIDO
   useEffect(() => {
+    let isMounted = true;
+
     if (personalAEditar && anioActivo) {
       docentesService
         .getDocenteIdPorUsuario(personalAEditar.usuario_id)
         .then((docenteId) => {
+          if (!isMounted) return;
+
           if (docenteId) {
             docentesService
               .getAsignaciones(docenteId, anioActivo.id)
-              .then((data) =>
+              .then((data) => {
+                if (!isMounted) return;
                 setGradosEditar(
                   data.map((d) => ({
                     gradoId: d.grado_id,
                     esTutor: d.es_tutor,
                   })),
-                ),
-              )
-              .catch(() => toast.error("Error al cargar grados"));
+                );
+                setIsLoadingGradosEditar(false);
+              })
+              .catch(() => {
+                if (!isMounted) return;
+                toast.error("Error al cargar grados");
+                setIsLoadingGradosEditar(false);
+              });
           } else {
-            setGradosEditar([]);
+            setIsLoadingGradosEditar(false);
           }
+        })
+        .catch(() => {
+          if (!isMounted) return;
+          toast.error("Error al buscar perfil de docente");
+          setIsLoadingGradosEditar(false);
         });
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [personalAEditar, anioActivo]);
 
   const personalFiltrado = useMemo(() => {
@@ -159,12 +174,24 @@ export default function GestionPersonal() {
         }
       }
 
+      // Autogenerar cargo si seleccionó área de dirección en la creación
+      let cargoFinal = formData.rol;
+      if (formData.area_director) {
+        const areas = {
+          matematica: "Matemática",
+          lengua: "Lengua y Literatura",
+          sociales: "Ciencias Sociales",
+          naturales: "Ciencias Naturales",
+        };
+        cargoFinal = `Director de Área de ${areas[formData.area_director as keyof typeof areas]}`;
+      }
+
       const { token } = await invitacionesService.crearInvitacion({
         colegio_id: profile.colegio_id,
         email: formData.email,
         nombre: formData.nombres,
         rol: formData.rol,
-        cargo_especifico: formData.rol,
+        cargo_especifico: cargoFinal,
         invitado_por: profile.id,
       });
 
@@ -216,68 +243,56 @@ export default function GestionPersonal() {
     }
   };
 
-  const handleGuardarRol = async () => {
-    if (!personalAEditarRol || !profile?.colegio_id) return;
-    setIsSavingRol(true);
+  // ✅ NUEVA FUNCIÓN UNIFICADA PARA GUARDAR NOMBRE, ROL, CARGO Y ÁREA
+  const handleGuardarDatos = async () => {
+    if (!personalAEditarDatos || !profile?.colegio_id) return;
+    if (!nuevoNombre.trim())
+      return toast.error("El nombre no puede estar vacío.");
+
+    setIsSavingDatos(true);
     try {
+      let cargoFinal = nuevoCargo.trim();
+      // Si seleccionó un área y no escribió un cargo manual, lo autogeneramos
+      if (nuevoAreaDirector && !cargoFinal) {
+        const areas = {
+          matematica: "Matemática",
+          lengua: "Lengua y Literatura",
+          sociales: "Ciencias Sociales",
+          naturales: "Ciencias Naturales",
+        };
+        cargoFinal = `Director de Área de ${areas[nuevoAreaDirector as keyof typeof areas]}`;
+      }
+
       const { error } = await supabase
         .from("usuarios")
         .update({
+          display_name: nuevoNombre.trim(),
           rol: nuevoRol as
             | "docente"
             | "inspector"
             | "vicerrector"
             | "admin_colegio",
-          cargo_especifico: nuevoCargo.trim() || null,
+          cargo_especifico: cargoFinal || null,
+          area_director: nuevoAreaDirector || null,
         } as never)
-        .eq("id", personalAEditarRol.id);
+        .eq("id", personalAEditarDatos.id);
 
       if (error) throw error;
 
       queryClient.invalidateQueries({
         queryKey: ["personal", profile.colegio_id],
       });
-      toast.success("Rol y cargo actualizados correctamente");
-      setPersonalAEditarRol(null);
+      toast.success("Datos actualizados correctamente");
+      setPersonalAEditarDatos(null);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Error al actualizar",
       );
     } finally {
-      setIsSavingRol(false);
+      setIsSavingDatos(false);
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: Guardar Nombre
-  const handleGuardarNombre = async () => {
-    if (!personalAEditarNombre || !profile?.colegio_id) return;
-    if (!nuevoNombre.trim())
-      return toast.error("El nombre no puede estar vacío.");
-
-    setIsSavingNombre(true);
-    try {
-      const { error } = await supabase
-        .from("usuarios")
-        .update({ display_name: nuevoNombre.trim() } as never)
-        .eq("id", personalAEditarNombre.id);
-
-      if (error) throw error;
-
-      queryClient.invalidateQueries({
-        queryKey: ["personal", profile.colegio_id],
-      });
-      toast.success("Nombre actualizado correctamente");
-      setPersonalAEditarNombre(null);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Error al actualizar",
-      );
-    } finally {
-      setIsSavingNombre(false);
-    }
-  };
-
-  // ... (Toggles de grados y tutores se mantienen igual)
   const toggleGradoNuevo = (id: string) => {
     setGradosNuevo((prev) => {
       const existe = prev.find((g) => g.gradoId === id);
@@ -377,6 +392,7 @@ export default function GestionPersonal() {
                   <th className="px-6 py-4">Nombre</th>
                   <th className="px-6 py-4">Email</th>
                   <th className="px-6 py-4 text-center">Rol</th>
+                  <th className="px-6 py-4 text-center">Área Director</th>
                   <th className="px-6 py-4 text-center">Estado</th>
                   <th className="px-6 py-4 text-center">Acciones</th>
                 </tr>
@@ -409,55 +425,52 @@ export default function GestionPersonal() {
                       </span>
                     </td>
                     <td className="px-6 py-3 text-center">
+                      {user.area_director ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 capitalize">
+                          {user.area_director}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3 text-center">
                       <span className="text-xs font-bold bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md border border-emerald-200">
                         Activo
                       </span>
                     </td>
                     <td className="px-6 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        {/* ✅ NUEVO BOTÓN: Editar Nombre */}
                         <button
                           onClick={() => {
-                            setPersonalAEditarNombre({
+                            setPersonalAEditarDatos({
                               id: user.id,
-                              nombreActual: user.display_name || "",
-                            });
-                            setNuevoNombre(user.display_name || "");
-                          }}
-                          className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Editar Nombre"
-                        >
-                          <UserPen size={16} />
-                        </button>
-
-                        {/* Botón Editar Rol */}
-                        <button
-                          onClick={() => {
-                            setPersonalAEditarRol({
-                              id: user.id,
-                              nombre: user.display_name || "Usuario",
                               rolActual: user.rol,
                               cargoActual: user.cargo_especifico,
+                              areaActual: user.area_director,
                             });
+                            setNuevoNombre(user.display_name || "");
                             setNuevoRol(user.rol);
                             setNuevoCargo(user.cargo_especifico || "");
+                            setNuevoAreaDirector(user.area_director || "");
                           }}
                           className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
-                          title="Cambiar Rol / Cargo"
+                          title="Editar Datos"
                         >
                           <Pencil size={16} />
                         </button>
 
                         {user.rol !== "super_admin" && (
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              setIsLoadingGradosEditar(true);
+                              setGradosEditar([]);
                               setPersonalAEditar({
                                 id: user.id,
                                 usuario_id: user.id,
                                 nombre: user.display_name || "Usuario",
                                 email: user.email,
-                              })
-                            }
+                              });
+                            }}
                             className="px-2 py-1.5 bg-blue-50 text-brand-blue hover:bg-blue-100 rounded-lg transition-colors text-xs font-bold flex items-center gap-1"
                             title="Asignar Grados y Tutorías"
                           >
@@ -495,10 +508,8 @@ export default function GestionPersonal() {
         }
         size="4xl"
       >
-        {/* ... (contenido igual que antes) ... */}
         {!linkGenerado ? (
           <form onSubmit={handleCrear} className="flex flex-col h-full">
-            {/* ... (Campos: Cedula, Nombres, Email, Rol, Grados) ... */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-4">
               <div className="space-y-4">
                 <div className="flex items-center gap-2 border-b pb-2 mb-2">
@@ -566,6 +577,36 @@ export default function GestionPersonal() {
                     <option value="admin_colegio">Rector(a) / Admin</option>
                   </select>
                 </div>
+
+                {/* ✅ SELECTOR DE ÁREA DE DIRECCIÓN (CREAR) */}
+                {(formData.rol === "docente" ||
+                  formData.rol === "vicerrector") && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Área de Dirección (Opcional)
+                    </label>
+                    <select
+                      value={formData.area_director}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          area_director: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/50 outline-none bg-white"
+                    >
+                      <option value="">No es director de área</option>
+                      <option value="matematica">Matemática</option>
+                      <option value="lengua">Lengua y Literatura</option>
+                      <option value="sociales">Ciencias Sociales</option>
+                      <option value="naturales">Ciencias Naturales</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1.5 leading-tight">
+                      ⚠️ Se asignará formalmente cuando acepte la invitación.
+                      Podrás ajustarlo luego con el botón ✏️.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="space-y-4 md:border-l md:pl-8">
                 <div className="flex items-center gap-2 border-b pb-2 mb-2">
@@ -681,87 +722,108 @@ export default function GestionPersonal() {
         title={`Editar Grados de ${personalAEditar?.nombre}`}
         size="xl"
       >
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto p-1">
-            {grados?.map((grado) => {
-              const asignacion = gradosEditar.find(
-                (g) => g.gradoId === grado.id,
-              );
-              const isSelected = !!asignacion;
-              const isTutor = asignacion?.esTutor || false;
-              return (
-                <div
-                  key={grado.id}
-                  className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isSelected ? "bg-brand-blue/5 border-brand-blue ring-1 ring-brand-blue" : "bg-white border-slate-200"}`}
-                >
-                  <label className="flex items-center gap-3 cursor-pointer flex-1">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleGradoEditar(grado.id)}
-                      className="w-4 h-4 text-brand-blue rounded border-slate-300"
-                    />
-                    <span
-                      className={`text-sm font-medium ${isSelected ? "text-brand-dark" : "text-slate-600"}`}
-                    >
-                      {grado.nivel} - {grado.paralelo}
-                    </span>
-                  </label>
-                  {isSelected && (
-                    <button
-                      onClick={() => toggleTutorEditar(grado.id)}
-                      className={`px-2 py-1 text-[10px] font-bold rounded-md flex items-center gap-1 transition-colors ${isTutor ? "bg-amber-100 text-amber-700 border border-amber-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}
-                    >
-                      <Star
-                        size={10}
-                        className={isTutor ? "fill-amber-500" : ""}
-                      />{" "}
-                      {isTutor ? "TUTOR" : "Tutor"}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+        {isLoadingGradosEditar ? (
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <Loader2 className="animate-spin text-brand-blue w-8 h-8" />
+            <p className="text-sm text-slate-500">Cargando grados...</p>
           </div>
-          <div className="pt-4 flex gap-3 border-t mt-6">
-            <button
-              type="button"
-              onClick={() => setPersonalAEditar(null)}
-              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl text-sm"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleGuardarGrados}
-              disabled={isSavingGrados}
-              className="flex-1 px-4 py-2.5 bg-brand-blue text-white font-semibold rounded-xl shadow-md text-sm"
-            >
-              {isSavingGrados ? "Guardando..." : "Guardar Cambios"}
-            </button>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto p-1">
+              {grados?.map((grado) => {
+                const asignacion = gradosEditar.find(
+                  (g) => g.gradoId === grado.id,
+                );
+                const isSelected = !!asignacion;
+                const isTutor = asignacion?.esTutor || false;
+                return (
+                  <div
+                    key={grado.id}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isSelected ? "bg-brand-blue/5 border-brand-blue ring-1 ring-brand-blue" : "bg-white border-slate-200"}`}
+                  >
+                    <label className="flex items-center gap-3 cursor-pointer flex-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleGradoEditar(grado.id)}
+                        className="w-4 h-4 text-brand-blue rounded border-slate-300"
+                      />
+                      <span
+                        className={`text-sm font-medium ${isSelected ? "text-brand-dark" : "text-slate-600"}`}
+                      >
+                        {grado.nivel} - {grado.paralelo}
+                      </span>
+                    </label>
+                    {isSelected && (
+                      <button
+                        onClick={() => toggleTutorEditar(grado.id)}
+                        className={`px-2 py-1 text-[10px] font-bold rounded-md flex items-center gap-1 transition-colors ${isTutor ? "bg-amber-100 text-amber-700 border border-amber-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}
+                      >
+                        <Star
+                          size={10}
+                          className={isTutor ? "fill-amber-500" : ""}
+                        />{" "}
+                        {isTutor ? "TUTOR" : "Tutor"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="pt-4 flex gap-3 border-t mt-6">
+              <button
+                type="button"
+                onClick={() => setPersonalAEditar(null)}
+                className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGuardarGrados}
+                disabled={isSavingGrados}
+                className="flex-1 px-4 py-2.5 bg-brand-blue text-white font-semibold rounded-xl shadow-md text-sm"
+              >
+                {isSavingGrados ? "Guardando..." : "Guardar Cambios"}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </Modal>
 
-      {/* MODAL: EDITAR ROL Y CARGO */}
+      {/* MODAL UNIFICADO: EDITAR DATOS (NOMBRE, ROL, CARGO Y ÁREA) */}
       <Modal
-        isOpen={!!personalAEditarRol}
-        onClose={() => setPersonalAEditarRol(null)}
-        title={`Rol y Cargo de ${personalAEditarRol?.nombre}`}
+        isOpen={!!personalAEditarDatos}
+        onClose={() => setPersonalAEditarDatos(null)}
+        title="Editar Datos del Personal"
         size="md"
       >
         <div className="space-y-5">
           <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-700">
-            ⚠️ El <strong>rol</strong> define los permisos (menús). El{" "}
-            <strong>cargo</strong> es descriptivo (ej. "Director de Área de
-            Matemática"). Si además da clases, asígnale grados con el botón
-            "Grados".
+            ⚠️ El <strong>rol</strong> define los permisos. Si seleccionas un{" "}
+            <strong>Área de Dirección</strong>, el sistema autogenerará el cargo
+            descriptivo si dejas el cargo adicional vacío.
           </div>
-          {personalAEditarRol?.id === profile?.id && (
+
+          {personalAEditarDatos?.id === profile?.id && (
             <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-xs text-red-600">
-              Estás editando <strong>TU PROPIO</strong> rol. Si te quitas el rol
-              de Admin perderás acceso a este módulo.
+              Estás editando <strong>TU PROPIO</strong> usuario. Si te quitas el
+              rol de Admin perderás acceso a este módulo.
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+              Nombre Completo
+            </label>
+            <input
+              type="text"
+              value={nuevoNombre}
+              onChange={(e) => setNuevoNombre(e.target.value)}
+              className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/50 outline-none"
+              placeholder="Ej. Eduardo Guaitarilla"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-slate-600 mb-1.5">
               Rol de Sistema
@@ -777,71 +839,54 @@ export default function GestionPersonal() {
               <option value="admin_colegio">Rector(a) / Admin</option>
             </select>
           </div>
+
           <div>
             <label className="block text-sm font-semibold text-slate-600 mb-1.5">
-              Cargo (descriptivo)
+              Área de Dirección (Opcional)
+            </label>
+            <select
+              value={nuevoAreaDirector}
+              onChange={(e) => setNuevoAreaDirector(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/50 outline-none bg-white"
+            >
+              <option value="">No es director de área</option>
+              <option value="matematica">Matemática</option>
+              <option value="lengua">Lengua y Literatura</option>
+              <option value="sociales">Ciencias Sociales</option>
+              <option value="naturales">Ciencias Naturales</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+              Cargo Adicional (Opcional)
             </label>
             <input
               type="text"
               value={nuevoCargo}
               onChange={(e) => setNuevoCargo(e.target.value)}
-              placeholder="Ej. Director de Área de Matemática"
+              placeholder="Ej. Coordinador de Convivencia"
               className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/50 outline-none"
             />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Úsalo solo si tiene un cargo extra que no sea "Director de Área".
+            </p>
           </div>
-          <div className="pt-4 flex gap-3 border-t">
-            <button
-              type="button"
-              onClick={() => setPersonalAEditarRol(null)}
-              className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleGuardarRol}
-              disabled={isSavingRol || !nuevoRol}
-              className="flex-1 px-4 py-2.5 bg-brand-blue hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md text-sm disabled:opacity-50"
-            >
-              {isSavingRol ? "Guardando..." : "Guardar Cambios"}
-            </button>
-          </div>
-        </div>
-      </Modal>
 
-      {/* ✅ NUEVO MODAL: EDITAR NOMBRE */}
-      <Modal
-        isOpen={!!personalAEditarNombre}
-        onClose={() => setPersonalAEditarNombre(null)}
-        title="Editar Nombre"
-        size="md"
-      >
-        <div className="space-y-5">
-          <div>
-            <label className="block text-sm font-semibold text-slate-600 mb-1.5">
-              Nombre Completo
-            </label>
-            <input
-              type="text"
-              value={nuevoNombre}
-              onChange={(e) => setNuevoNombre(e.target.value)}
-              className="w-full px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/50 outline-none"
-              placeholder="Ej. Maritza Nazate"
-            />
-          </div>
           <div className="pt-4 flex gap-3 border-t">
             <button
               type="button"
-              onClick={() => setPersonalAEditarNombre(null)}
+              onClick={() => setPersonalAEditarDatos(null)}
               className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm"
             >
               Cancelar
             </button>
             <button
-              onClick={handleGuardarNombre}
-              disabled={isSavingNombre}
+              onClick={handleGuardarDatos}
+              disabled={isSavingDatos || !nuevoNombre.trim()}
               className="flex-1 px-4 py-2.5 bg-brand-blue hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md text-sm disabled:opacity-50"
             >
-              {isSavingNombre ? "Guardando..." : "Guardar Nombre"}
+              {isSavingDatos ? "Guardando..." : "Guardar Cambios"}
             </button>
           </div>
         </div>

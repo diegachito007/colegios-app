@@ -12,9 +12,10 @@ import {
   Power,
 } from "lucide-react";
 import Modal from "../../../components/ui/Modal";
-import ConfirmModal from "../../../components/ui/ConfirmModal"; // <-- NUEVO IMPORT
+import ConfirmModal from "../../../components/ui/ConfirmModal";
 import Neural from "../../../components/ui/Neural";
 import type { Database } from "../../../types/database.types";
+import toast from "react-hot-toast";
 
 type AnioLectivoRow = Database["public"]["Tables"]["anios_lectivos"]["Row"];
 type PeriodoEvaluacionRow =
@@ -56,58 +57,57 @@ export default function GestionAniosLectivos() {
 
   const [periodos, setPeriodos] = useState<PeriodoCalculado[]>([]);
 
-  // Lógica 1: Nombre autogenerado (Ej. 2026-2027)
+  // ✅ Helper para mostrar la fecha visualmente sin que se reste un día por UTC
+  const formatFechaVisual = (fechaString: string) => {
+    if (!fechaString) return "";
+    const [year, month, day] = fechaString.split("-");
+    return `${day}/${month}/${year}`;
+  };
+
+  // Lógica 1: Nombre autogenerado (Ej. 2026-2027): se lee del string, sin Date()
   const nombreGenerado = useMemo(() => {
     if (!formData.fecha_inicio || !formData.fecha_fin) return "";
-    const yearInicio = new Date(formData.fecha_inicio).getFullYear();
-    const yearFin = new Date(formData.fecha_fin).getFullYear();
-    return `${yearInicio}-${yearFin}`;
+    return `${formData.fecha_inicio.slice(0, 4)}-${formData.fecha_fin.slice(0, 4)}`;
   }, [formData.fecha_inicio, formData.fecha_fin]);
 
-  // Lógica 2: División automática de períodos
+  // Lógica 2: División automática de períodos (UTC puro, sin bugs de timezone)
   const calcularPeriodos = (
     inicio: string,
     fin: string,
     tipo: "trimestral" | "quimestral",
-  ) => {
+  ): PeriodoCalculado[] => {
     if (!inicio || !fin) return [];
-    const fechaInicio = new Date(inicio);
-    const fechaFin = new Date(fin);
-    const totalDias = Math.ceil(
-      (fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    const numPeriodos = tipo === "trimestral" ? 3 : 2;
-    const diasPorPeriodo = Math.floor(totalDias / numPeriodos);
 
-    const nuevosPeriodos: PeriodoCalculado[] = [];
+    const DIA = 86_400_000;
+    const parseISO = (s: string) => {
+      const [y, m, d] = s.split("-").map(Number);
+      return Date.UTC(y, m - 1, d);
+    };
+    const toISO = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-    for (let i = 0; i < numPeriodos; i++) {
-      const pInicio = new Date(
-        fechaInicio.getTime() + i * diasPorPeriodo * 24 * 60 * 60 * 1000,
-      );
-      const pFin =
-        i === numPeriodos - 1
-          ? fechaFin
-          : new Date(
-              pInicio.getTime() + diasPorPeriodo * 24 * 60 * 60 * 1000 - 1,
-            );
+    const ini = parseISO(inicio);
+    const end = parseISO(fin);
+    if (end <= ini) return [];
 
-      const formatDate = (d: Date) => {
-        const offset = d.getTimezoneOffset();
-        return new Date(d.getTime() - offset * 60 * 1000)
-          .toISOString()
-          .split("T")[0];
-      };
+    const totalDias = Math.round((end - ini) / DIA) + 1; // inclusivo
+    const n = tipo === "trimestral" ? 3 : 2;
+    const base = Math.floor(totalDias / n);
+    const resto = totalDias % n; // los primeros `resto` períodos reciben 1 día extra
 
-      nuevosPeriodos.push({
-        nombre:
-          tipo === "trimestral" ? `Trimestre ${i + 1}` : `Quimestre ${i + 1}`,
-        fecha_inicio: formatDate(pInicio),
-        fecha_fin: formatDate(pFin),
+    const periodos: PeriodoCalculado[] = [];
+    let cursor = ini;
+    for (let i = 0; i < n; i++) {
+      const dias = base + (i < resto ? 1 : 0);
+      const pFin = cursor + (dias - 1) * DIA;
+      periodos.push({
+        nombre: `${tipo === "trimestral" ? "Trimestre" : "Quimestre"} ${i + 1}`,
+        fecha_inicio: toISO(cursor),
+        fecha_fin: toISO(pFin),
         orden: i + 1,
       });
+      cursor = pFin + DIA;
     }
-    return nuevosPeriodos;
+    return periodos;
   };
 
   const handleFechasChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,6 +198,16 @@ export default function GestionAniosLectivos() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile?.colegio_id || !nombreGenerado) return;
+
+    // ✅ VALIDACIÓN: Evitar años duplicados (mismo nombre) en el mismo colegio
+    const anioDuplicado = anios?.find(
+      (a) => a.nombre === nombreGenerado && a.id !== editingId
+    );
+
+    if (anioDuplicado) {
+      toast.error(`El año lectivo ${nombreGenerado} ya existe.`);
+      return;
+    }
 
     try {
       if (editingId) {
@@ -313,8 +323,8 @@ export default function GestionAniosLectivos() {
                         </h3>
                         <p className="text-sm text-slate-500">
                           Desde{" "}
-                          {new Date(anio.fecha_inicio).toLocaleDateString()}{" "}
-                          hasta {new Date(anio.fecha_fin).toLocaleDateString()}
+                          {formatFechaVisual(anio.fecha_inicio)}{" "}
+                          hasta {formatFechaVisual(anio.fecha_fin)}
                         </p>
                       </div>
                     </div>

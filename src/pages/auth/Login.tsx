@@ -5,7 +5,6 @@ import { Monitor, ArrowRight } from "lucide-react";
 // Importamos la red neuronal (asegúrate de que la ruta sea correcta)
 import NeuralBackground from "../../components/ui/Neural";
 import toast from "react-hot-toast";
-import { supabase } from "../../lib/supabase";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -39,14 +38,10 @@ export default function Login() {
         position: "top-center",
       });
 
-      // Si el error fue por colegio inactivo, nos aseguramos de cerrar cualquier sesión residual
-      if (error.message.includes("inactiva")) {
-        await supabase.auth.signOut();
-      }
-
       setIsLoading(false);
     }
-    // Si no hay error, el AuthContext y el useEffect harán la redirección
+    // Si no hay error, el AuthContext y el useEffect harán la redirección.
+    // Nota: El AuthContext ya se encarga de hacer signOut si el colegio está inactivo.
   };
 
   return (

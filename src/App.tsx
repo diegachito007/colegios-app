@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./hooks/useAuth";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 // Landing Pages
@@ -25,11 +25,14 @@ import GestionEstudiantes from "./pages/admin/estudiantes/GestionEstudiantes";
 import DisenadorFormularios from "./pages/admin/formularios/DisenadorFormularios";
 import GestionPersonal from "./pages/admin/personal/GestionPersonal";
 import MiHorario from "./pages/docente/miHorario/MiHorario";
+// ✅ NUEVO IMPORT
+import GestionConfiguracion from "./pages/admin/configuracion/GestionConfiguracion";
 
 // Hooks e Iconos
 import { useColegios } from "./hooks/useColegios";
 import { useAniosLectivos } from "./hooks/useAniosLectivos";
 import { useGrados } from "./hooks/useGrados";
+import { usePersonal } from "./hooks/usePersonal";
 import {
   Building2,
   Users,
@@ -142,19 +145,31 @@ function DashboardAdminColegio() {
     anioActivo?.id || null,
   );
 
-  const [nombreColegio, setNombreColegio] = useState<string>("tu institución");
+  const { personal, isLoading: isLoadingPersonal } = usePersonal(
+    profile?.colegio_id || null,
+  );
 
+  // ✅ Estado para contar estudiantes, inicializado sin setState en efecto
+  const [totalEstudiantes, setTotalEstudiantes] = useState<number>(0);
+  const [isLoadingEstudiantes, setIsLoadingEstudiantes] = useState(
+    !!profile?.colegio_id,
+  );
+
+  // ✅ EFECTO CORREGIDO: Sin setState síncrono
   useEffect(() => {
-    if (profile?.colegio_id) {
-      supabase
-        .from("colegios")
-        .select("nombre")
-        .eq("id", profile.colegio_id)
-        .single()
-        .then(({ data }) => {
-          if (data) setNombreColegio((data as { nombre: string }).nombre);
-        });
-    }
+    if (!profile?.colegio_id) return;
+
+    supabase
+      .from("matriculas")
+      .select("*", { count: "exact", head: true })
+      .eq("colegio_id", profile.colegio_id)
+      .eq("activo", true)
+      .then(({ count, error }) => {
+        if (!error && count !== null) {
+          setTotalEstudiantes(count);
+        }
+        setIsLoadingEstudiantes(false);
+      });
   }, [profile?.colegio_id]);
 
   return (
@@ -164,11 +179,6 @@ function DashboardAdminColegio() {
       </div>
 
       <div className="relative z-10 p-8 max-w-6xl mx-auto space-y-8">
-        <div className="inline-flex items-center gap-2 bg-blue-50 text-brand-blue px-3 py-1 rounded-full text-xs font-bold mb-3 border border-blue-100 uppercase tracking-wide">
-          <Building2 size={14} />
-          {nombreColegio}
-        </div>
-
         <div>
           <h1 className="text-3xl font-extrabold text-brand-dark tracking-tight">
             Hola,{" "}
@@ -231,7 +241,13 @@ function DashboardAdminColegio() {
               <div>
                 <p className="text-sm font-medium text-slate-500">Personal</p>
                 <p className="text-4xl font-extrabold text-brand-dark mt-2">
-                  --
+                  {isLoadingPersonal ? (
+                    <span className="animate-pulse bg-slate-200 text-transparent rounded">
+                      0
+                    </span>
+                  ) : (
+                    personal?.length || 0
+                  )}
                 </p>
               </div>
               <div className="p-3 bg-emerald-50 rounded-xl text-emerald-500">
@@ -241,7 +257,30 @@ function DashboardAdminColegio() {
           </div>
         </div>
 
-        {/* ✅ ACCESOS RÁPIDOS ACTUALIZADOS */}
+        {/* Tarjeta de Estudiantes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white/80 backdrop-blur-xl p-6 rounded-2xl border border-slate-200/60 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                Estudiantes Activos
+              </p>
+              <p className="text-4xl font-extrabold text-brand-dark mt-2">
+                {isLoadingEstudiantes ? (
+                  <span className="animate-pulse bg-slate-200 text-transparent rounded">
+                    0
+                  </span>
+                ) : (
+                  totalEstudiantes
+                )}
+              </p>
+            </div>
+            <div className="p-3 bg-purple-50 rounded-xl text-purple-600">
+              <UserPlus size={24} />
+            </div>
+          </div>
+        </div>
+
+        {/* ACCESOS RÁPIDOS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white/80 backdrop-blur-xl p-5 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
             <div>
@@ -426,6 +465,16 @@ function AppRoutes() {
             <SuperAdminRoute>
               <ListaColegios />
             </SuperAdminRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ✅ NUEVA RUTA: CONFIGURACIÓN */}
+      <Route
+        path="/admin/configuracion"
+        element={
+          <ProtectedRoute>
+            <GestionConfiguracion />
           </ProtectedRoute>
         }
       />

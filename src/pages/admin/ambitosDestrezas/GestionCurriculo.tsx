@@ -17,8 +17,9 @@ import {
   BookOpen,
   Search,
   CheckCircle2,
-  Layers,
-  FileText,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { CATALOGO_CURRICULO } from "../../../utils/catalogoCurriculo";
@@ -34,14 +35,18 @@ export default function GestionCurriculo() {
 
   // Navegación
   const [selectedGradoId, setSelectedGradoId] = useState<string>("");
-  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
 
-  // Modales de creación
+  const [openAreas, setOpenAreas] = useState<string[]>([]);
+  const [expandedAreas, setExpandedAreas] = useState<string[]>([]);
+
+  // Modales
   const [showAreaModal, setShowAreaModal] = useState(false);
   const [showMateriaModal, setShowMateriaModal] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
 
-  // Estados de confirmación de borrado
+  const [targetAreaId, setTargetAreaId] = useState<string | null>(null);
+
+  // Confirmación de borrado
   const [areaAEliminar, setAreaAEliminar] = useState<{
     id: string;
     nombre: string;
@@ -51,16 +56,15 @@ export default function GestionCurriculo() {
     descripcion: string;
   } | null>(null);
 
-  // Estados para el editor masivo
+  // Editor masivo y buscador
   const [massiveData, setMassiveData] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Estados para copiar
+  // Copiar
   const [selectedDestGrados, setSelectedDestGrados] = useState<string[]>([]);
 
   const gradoActual = grados?.find((g) => g.id === selectedGradoId);
 
-  // Lógica dinámica: Inicial 1, Inicial 2 y 1ro EGB usan Ámbitos/Destrezas.
   const esInicial = useMemo(() => {
     if (!gradoActual) return true;
     const nombre = gradoActual.nivel.toLowerCase();
@@ -92,15 +96,10 @@ export default function GestionCurriculo() {
     anioActivo?.id || null,
   );
 
-  const materiasDeArea = useMemo(() => {
-    if (!selectedAreaId) return [];
-    return materias?.filter((m) => m.area_id === selectedAreaId) || [];
-  }, [materias, selectedAreaId]);
-
-  const areaSeleccionada = areas?.find((a) => a.id === selectedAreaId);
+  const areaSeleccionada = areas?.find((a) => a.id === targetAreaId);
   const gradosDestino = grados?.filter((g) => g.id !== selectedGradoId) || [];
 
-  // --- MANEJO DE LÍNEAS EN EL TEXTAREA ---
+  // --- LÓGICA DE LÍNEAS (TEXTAREA) ---
   const getLineas = () =>
     massiveData
       .split("\n")
@@ -114,13 +113,10 @@ export default function GestionCurriculo() {
     }
   };
 
-  // --- GUARDAR ---
+  // --- ACCIONES DE GUARDADO ---
   const handleGuardarArea = async () => {
     const lineas = getLineas();
-    if (lineas.length === 0) {
-      toast.error("Ingresa al menos un nombre.");
-      return;
-    }
+    if (lineas.length === 0) return toast.error("Ingresa al menos un nombre.");
 
     const nuevas = lineas.map((nombre, index) => ({
       colegio_id: profile!.colegio_id!,
@@ -131,40 +127,49 @@ export default function GestionCurriculo() {
       activo: true,
     }));
     try {
-      await crearAreas(nuevas);
+      // ✅ AQUÍ EL "as never" PARA EVITAR EL ERROR DE TYPESCRIPT
+      await crearAreas(nuevas as never);
       setShowAreaModal(false);
       setMassiveData("");
     } catch {
-      /* Manejado por el hook */
+      /* Manejado por hook */
     }
   };
 
   const handleGuardarMateria = async () => {
+    if (!targetAreaId) return;
     const lineas = getLineas();
-    if (lineas.length === 0) {
-      toast.error("Ingresa al menos una materia.");
-      return;
-    }
+    if (lineas.length === 0)
+      return toast.error("Ingresa al menos una materia.");
+
+    const materiasDeEstaArea =
+      materias?.filter((m) => m.area_id === targetAreaId) || [];
 
     const nuevas = lineas.map((texto, index) => ({
       colegio_id: profile!.colegio_id!,
       grado_id: selectedGradoId,
-      area_id: selectedAreaId!,
+      area_id: targetAreaId,
       nombre: texto.substring(0, 100),
       descripcion: texto,
-      orden: materiasDeArea.length + index + 1,
+      orden: materiasDeEstaArea.length + index + 1,
       activo: true,
     }));
     try {
-      await crearMaterias(nuevas);
+      // ✅ AQUÍ EL "as never" PARA EVITAR EL ERROR DE TYPESCRIPT
+      await crearMaterias(nuevas as never);
+
+      if (!openAreas.includes(targetAreaId)) {
+        setOpenAreas((prev) => [...prev, targetAreaId]);
+      }
+
       setShowMateriaModal(false);
       setMassiveData("");
+      setTargetAreaId(null);
     } catch {
-      /* Manejado por el hook */
+      /* Manejado por hook */
     }
   };
 
-  // --- COPIAR CURRÍCULO ---
   const handleCopy = async () => {
     if (selectedDestGrados.length === 0) return;
     try {
@@ -172,7 +177,7 @@ export default function GestionCurriculo() {
       setShowCopyModal(false);
       setSelectedDestGrados([]);
     } catch {
-      /* Manejado por el hook */
+      /* Manejado por hook */
     }
   };
 
@@ -182,7 +187,13 @@ export default function GestionCurriculo() {
     );
   };
 
-  // --- EXPORTAR EXCEL CON EXCELJS ---
+  const toggleArea = (id: string) => {
+    setOpenAreas((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
+    );
+  };
+
+  // --- EXPORTAR EXCEL ---
   const exportarAExcel = async () => {
     if (!gradoActual) return;
 
@@ -205,13 +216,11 @@ export default function GestionCurriculo() {
       { header: "Grado", key: "grado", width: 15 },
       { header: "Paralelo", key: "paralelo", width: 10 },
     ];
-
     ws1.getRow(1).eachCell((cell) => {
       cell.font = headerStyle.font;
       cell.fill = headerStyle.fill;
       cell.alignment = headerStyle.alignment;
     });
-
     areas?.forEach((a, idx) => {
       ws1.addRow({
         num: idx + 1,
@@ -234,7 +243,6 @@ export default function GestionCurriculo() {
       cell.fill = headerStyle.fill;
       cell.alignment = headerStyle.alignment;
     });
-
     materias?.forEach((m, idx) => {
       const area = areas?.find((a) => a.id === m.area_id);
       ws2.addRow({
@@ -258,7 +266,7 @@ export default function GestionCurriculo() {
     window.URL.revokeObjectURL(url);
   };
 
-  // --- LISTAS DEL CATÁLOGO ---
+  // --- CATÁLOGOS FILTRADOS ---
   const listaCatalogoAreas = useMemo(() => {
     const base = esInicial
       ? CATALOGO_CURRICULO.INICIAL
@@ -277,7 +285,6 @@ export default function GestionCurriculo() {
         "I.ECA.1.1.1. Explora y representa corporal, musical...",
       ].filter((m) => m.toLowerCase().includes(searchTerm.toLowerCase()));
     }
-
     const areaActual = areaSeleccionada?.nombre;
     const info = CATALOGO_CURRICULO.EGB_BACHILLERATO.filter(
       (c) => c.area === areaActual,
@@ -289,16 +296,19 @@ export default function GestionCurriculo() {
     );
   }, [esInicial, areaSeleccionada, searchTerm]);
 
-  // Resetear buscador al abrir modales
   const openAreaModal = () => {
     setMassiveData("");
     setSearchTerm("");
     setShowAreaModal(true);
   };
-  const openMateriaModal = () => {
+  const openMateriaModal = (areaId: string) => {
+    setTargetAreaId(areaId);
     setMassiveData("");
     setSearchTerm("");
     setShowMateriaModal(true);
+    if (!expandedAreas.includes(areaId)) {
+      setExpandedAreas((prev) => [...prev, areaId]);
+    }
   };
 
   if (isLoadingGrados || isLoadingCurriculo) {
@@ -334,14 +344,15 @@ export default function GestionCurriculo() {
       </div>
 
       <div className="relative z-10 max-w-6xl mx-auto space-y-6">
-        {/* HEADER DINÁMICO */}
+        {/* HEADER */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             {selectedGradoId && (
               <button
                 onClick={() => {
                   setSelectedGradoId("");
-                  setSelectedAreaId(null);
+                  setOpenAreas([]);
+                  setTargetAreaId(null);
                 }}
                 className="flex items-center gap-1.5 text-sm font-semibold text-brand-blue hover:text-blue-800 mb-2 transition-colors"
               >
@@ -399,185 +410,168 @@ export default function GestionCurriculo() {
           </div>
         )}
 
-        {/* VISTA 2: CURRÍCULO DEL GRADO SELECCIONADO */}
+        {/* VISTA 2: ÁRBOL DE ÁREAS Y MATERIAS */}
         {selectedGradoId && (
-          <>
-            {/* Sub-vista: Áreas / Ámbitos */}
-            {!selectedAreaId && (
-              <div className="bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-4">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-bold text-brand-dark">
-                      {terminoPadre}s
-                    </h3>
-                    {/* ✅ NUEVO: Panel de Resumen (Consolidado) */}
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 bg-blue-50 text-brand-blue px-3 py-1 rounded-lg text-xs font-bold border border-blue-100">
-                        <Layers size={14} /> {areas?.length || 0} {terminoPadre}
-                        s
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-600 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-100">
-                        <FileText size={14} /> {materias?.length || 0}{" "}
-                        {terminoHijo}s
-                      </span>
-                    </div>
-                  </div>
+          <div className="bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-4">
+              <div>
+                <h3 className="text-lg font-bold text-brand-dark">
+                  Estructura Curricular
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Despliega un {terminoPadre.toLowerCase()} para ver sus{" "}
+                  {terminoHijo.toLowerCase()}s.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowCopyModal(true)}
+                  disabled={!areas || areas.length === 0}
+                  className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-sm hover:bg-slate-50 disabled:opacity-50 text-slate-700"
+                >
+                  <Copy size={16} /> Copiar
+                </button>
+                <button
+                  onClick={exportarAExcel}
+                  className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-sm hover:bg-slate-50 text-slate-700"
+                >
+                  <FileSpreadsheet size={16} /> Excel
+                </button>
+                <button
+                  onClick={openAreaModal}
+                  className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-md hover:bg-blue-700"
+                >
+                  <Plus size={16} /> Nuevo {terminoPadre}
+                </button>
+              </div>
+            </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => setShowCopyModal(true)}
-                      disabled={!areas || areas.length === 0}
-                      className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-sm hover:bg-slate-50 disabled:opacity-50 text-slate-700"
-                    >
-                      <Copy size={16} /> Copiar a otros grados
-                    </button>
-                    <button
-                      onClick={exportarAExcel}
-                      className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-sm hover:bg-slate-50 text-slate-700"
-                    >
-                      <FileSpreadsheet size={16} /> Exportar Excel
-                    </button>
-                    <button
-                      onClick={openAreaModal}
-                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-md hover:bg-blue-700"
-                    >
-                      <Plus size={16} /> Nuevo {terminoPadre}
-                    </button>
-                  </div>
+            <div className="p-4">
+              {!areas || areas.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
+                  <FolderOpen
+                    className="mx-auto text-slate-300 mb-2"
+                    size={48}
+                  />
+                  <p className="text-slate-500 font-medium">
+                    No hay {terminoPadre}s registrados
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    Crea el primer {terminoPadre.toLowerCase()} para empezar.
+                  </p>
                 </div>
+              ) : (
+                <div className="space-y-3">
+                  {areas.map((area) => {
+                    const materiasDeArea =
+                      materias?.filter((m) => m.area_id === area.id) || [];
+                    const isOpen = openAreas.includes(area.id);
 
-                <div className="p-4 space-y-2">
-                  {!areas || areas.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
-                      <BookOpen
-                        className="mx-auto text-slate-300 mb-2"
-                        size={48}
-                      />
-                      <p className="text-slate-500 font-medium">
-                        No hay {terminoPadre}s registrados
-                      </p>
-                      <p className="text-sm text-slate-400">
-                        Crea el primer {terminoPadre.toLowerCase()} para
-                        empezar.
-                      </p>
-                    </div>
-                  ) : (
-                    areas.map((area) => {
-                      const count =
-                        materias?.filter((m) => m.area_id === area.id).length ||
-                        0;
-                      return (
+                    return (
+                      <div
+                        key={area.id}
+                        className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm transition-all"
+                      >
+                        {/* Cabecera del Área */}
                         <div
-                          key={area.id}
-                          className="flex justify-between items-center p-3 border border-slate-200 rounded-xl hover:border-brand-blue transition-colors bg-white shadow-sm"
+                          className={`flex items-center justify-between p-4 cursor-pointer transition-colors ${isOpen ? "bg-blue-50/50 border-b border-slate-200" : "hover:bg-slate-50"}`}
+                          onClick={() => toggleArea(area.id)}
                         >
-                          <div>
-                            <h4 className="font-bold text-brand-dark">
-                              {area.nombre}
-                            </h4>
-                            <p className="text-xs text-slate-500">
-                              {count} {terminoHijo}(s) registrado(s)
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setSelectedAreaId(area.id)}
-                              className="text-brand-blue text-xs font-bold bg-blue-50 px-3 py-1.5 rounded-md hover:bg-blue-100"
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${isOpen ? "bg-brand-blue text-white" : "bg-slate-100 text-slate-500"}`}
                             >
-                              Ver {terminoHijo}s
+                              {isOpen ? (
+                                <ChevronDown size={18} />
+                              ) : (
+                                <ChevronRight size={18} />
+                              )}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-brand-dark flex items-center gap-2">
+                                {area.nombre}
+                              </h4>
+                              <p className="text-xs text-slate-500">
+                                {materiasDeArea.length} {terminoHijo}(s)
+                              </p>
+                            </div>
+                          </div>
+
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => openMateriaModal(area.id)}
+                              className="text-brand-blue text-xs font-bold bg-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1"
+                            >
+                              <Plus size={14} /> Añadir {terminoHijo}
                             </button>
                             <button
                               onClick={() => setAreaAEliminar(area)}
                               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title={`Eliminar ${terminoPadre}`}
                             >
                               <Trash2 size={16} />
                             </button>
                           </div>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
 
-            {/* Sub-vista: Materias / Destrezas */}
-            {selectedAreaId && areaSeleccionada && (
-              <div className="bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-4">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setSelectedAreaId(null)}
-                      className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-500"
-                      title="Volver a Áreas"
-                    >
-                      <ArrowLeft size={16} />
-                    </button>
-                    <div>
-                      <h3 className="text-lg font-bold text-brand-dark">
-                        {terminoHijo}s de: {areaSeleccionada.nombre}
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        {materiasDeArea.length} registrado(s)
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={openMateriaModal}
-                    className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-md hover:bg-blue-700"
-                  >
-                    <Plus size={16} /> Agregar {terminoHijo}s
-                  </button>
-                </div>
-
-                <div className="p-4 space-y-2">
-                  {materiasDeArea.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
-                      <FileSpreadsheet
-                        className="mx-auto text-slate-300 mb-2"
-                        size={48}
-                      />
-                      <p className="text-slate-500 font-medium">
-                        No hay {terminoHijo}s registradas
-                      </p>
-                      <p className="text-sm text-slate-400">
-                        Agrega las {terminoHijo.toLowerCase()}s de este{" "}
-                        {terminoPadre.toLowerCase()}.
-                      </p>
-                    </div>
-                  ) : (
-                    materiasDeArea.map((m, index) => (
-                      <div
-                        key={m.id}
-                        className="flex justify-between items-start p-3 border border-slate-200 rounded-xl hover:border-brand-blue transition-colors bg-white shadow-sm"
-                      >
-                        <div className="flex gap-3">
-                          <span className="font-bold text-slate-400 text-sm bg-slate-100 w-6 h-6 flex items-center justify-center rounded-md shrink-0">
-                            {index + 1}
-                          </span>
-                          <p className="text-sm text-brand-dark whitespace-pre-line leading-relaxed">
-                            {m.descripcion}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => setMateriaAEliminar(m)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {/* Cuerpo (Materias) */}
+                        {isOpen && (
+                          <div className="p-4 bg-slate-50/50">
+                            {materiasDeArea.length === 0 ? (
+                              <div className="text-center py-6 text-slate-400 bg-white rounded-lg border border-dashed border-slate-200">
+                                <p className="text-sm">
+                                  No hay {terminoHijo}s en este{" "}
+                                  {terminoPadre.toLowerCase()}.
+                                </p>
+                                <button
+                                  onClick={() => openMateriaModal(area.id)}
+                                  className="text-brand-blue text-xs font-semibold hover:underline mt-1"
+                                >
+                                  Agregar la primera {terminoHijo}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {materiasDeArea.map((m, index) => (
+                                  <div
+                                    key={m.id}
+                                    className="flex justify-between items-start p-3 border border-slate-200 rounded-lg bg-white hover:border-brand-blue transition-colors group"
+                                  >
+                                    <div className="flex gap-3">
+                                      <span className="font-bold text-slate-400 text-xs bg-slate-100 w-6 h-6 flex items-center justify-center rounded-md shrink-0 mt-0.5">
+                                        {index + 1}
+                                      </span>
+                                      <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+                                        {m.descripcion}
+                                      </p>
+                                    </div>
+                                    <button
+                                      onClick={() => setMateriaAEliminar(m)}
+                                      className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                                      title={`Eliminar ${terminoHijo}`}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ))
-                  )}
+                    );
+                  })}
                 </div>
-              </div>
-            )}
-          </>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
-      {/* =========================================
-          MODAL: CREAR ÁREA / ÁMBITO (2 Columnas)
-      ========================================= */}
+      {/* MODAL: CREAR ÁREA / ÁMBITO */}
       <Modal
         isOpen={showAreaModal}
         onClose={() => setShowAreaModal(false)}
@@ -612,13 +606,7 @@ export default function GestionCurriculo() {
                       key={area}
                       onClick={() => agregarLinea(area)}
                       disabled={yaEnTexto || yaEnBd}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors ${
-                        yaEnBd
-                          ? "bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed"
-                          : yaEnTexto
-                            ? "bg-blue-50 border-brand-blue"
-                            : "bg-white border-slate-200 hover:border-brand-blue"
-                      }`}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors ${yaEnBd ? "bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed" : yaEnTexto ? "bg-blue-50 border-brand-blue" : "bg-white border-slate-200 hover:border-brand-blue"}`}
                     >
                       <span
                         className={`text-sm ${yaEnTexto || yaEnBd ? "text-slate-500" : "text-slate-700 font-medium"}`}
@@ -638,7 +626,6 @@ export default function GestionCurriculo() {
                 })}
               </div>
             </div>
-
             <div className="flex flex-col h-full">
               <div className="mb-3">
                 <h3 className="font-bold text-slate-700 mb-2">
@@ -656,7 +643,6 @@ export default function GestionCurriculo() {
               />
             </div>
           </div>
-
           <div className="pt-4 flex gap-3 border-t border-slate-100">
             <button
               onClick={() => setShowAreaModal(false)}
@@ -681,9 +667,7 @@ export default function GestionCurriculo() {
         </div>
       </Modal>
 
-      {/* =========================================
-          MODAL: CREAR MATERIA / DESTREZA (2 Columnas)
-      ========================================= */}
+      {/* MODAL: CREAR MATERIA / DESTREZA */}
       <Modal
         isOpen={showMateriaModal}
         onClose={() => setShowMateriaModal(false)}
@@ -717,21 +701,16 @@ export default function GestionCurriculo() {
                 ) : (
                   listaCatalogoMaterias.map((materia) => {
                     const yaEnTexto = getLineas().includes(materia);
-                    const yaEnBd = materiasDeArea.some(
-                      (m) => m.descripcion === materia,
+                    const yaEnBd = materias?.some(
+                      (m) =>
+                        m.area_id === targetAreaId && m.descripcion === materia,
                     );
                     return (
                       <button
                         key={materia}
                         onClick={() => agregarLinea(materia)}
                         disabled={yaEnTexto || yaEnBd}
-                        className={`w-full flex items-start gap-2 p-3 rounded-xl border text-left transition-colors ${
-                          yaEnBd
-                            ? "bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed"
-                            : yaEnTexto
-                              ? "bg-blue-50 border-brand-blue"
-                              : "bg-white border-slate-200 hover:border-brand-blue"
-                        }`}
+                        className={`w-full flex items-start gap-2 p-3 rounded-xl border text-left transition-colors ${yaEnBd ? "bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed" : yaEnTexto ? "bg-blue-50 border-brand-blue" : "bg-white border-slate-200 hover:border-brand-blue"}`}
                       >
                         <div className="flex-1">
                           <span
@@ -757,7 +736,6 @@ export default function GestionCurriculo() {
                 )}
               </div>
             </div>
-
             <div className="flex flex-col h-full">
               <div className="mb-3">
                 <h3 className="font-bold text-slate-700 mb-2">
@@ -779,7 +757,6 @@ export default function GestionCurriculo() {
               />
             </div>
           </div>
-
           <div className="pt-4 flex gap-3 border-t border-slate-100">
             <button
               onClick={() => setShowMateriaModal(false)}
@@ -804,9 +781,7 @@ export default function GestionCurriculo() {
         </div>
       </Modal>
 
-      {/* =========================================
-          MODAL: COPIAR CURRÍCULO 
-      ========================================= */}
+      {/* MODAL: COPIAR CURRÍCULO */}
       <Modal
         isOpen={showCopyModal}
         onClose={() => setShowCopyModal(false)}
@@ -827,7 +802,6 @@ export default function GestionCurriculo() {
             {terminoPadre.toLowerCase()} con el mismo nombre, no se duplicará
             (se omitirá).
           </div>
-
           <div className="flex justify-between items-center mb-1">
             <span className="text-xs font-semibold text-slate-500">
               {selectedDestGrados.length} seleccionado(s)
@@ -847,7 +821,6 @@ export default function GestionCurriculo() {
                 : "Seleccionar todos"}
             </button>
           </div>
-
           <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1 bg-slate-50">
             {gradosDestino.length === 0 ? (
               <p className="text-center text-sm text-slate-500 py-4">
@@ -872,7 +845,6 @@ export default function GestionCurriculo() {
               ))
             )}
           </div>
-
           <div className="pt-4 flex gap-3 border-t">
             <button
               type="button"
@@ -901,9 +873,7 @@ export default function GestionCurriculo() {
         </div>
       </Modal>
 
-      {/* =========================================
-          MODALES DE CONFIRMACIÓN DE BORRADO 
-      ========================================= */}
+      {/* CONFIRMACIONES DE BORRADO */}
       <ConfirmModal
         isOpen={!!areaAEliminar}
         onClose={() => setAreaAEliminar(null)}
@@ -916,10 +886,11 @@ export default function GestionCurriculo() {
         title={`¿Eliminar ${terminoPadre}?`}
         message={
           <>
-            Estás a punto de eliminar <strong>"{areaAEliminar?.nombre}"</strong>
-            . Si tiene {terminoHijo}s asociadas, también se borrarán de forma
-            permanente.
-            <br />
+            <p>
+              Estás a punto de eliminar{" "}
+              <strong>"{areaAEliminar?.nombre}"</strong>. Si tiene {terminoHijo}
+              s asociadas, también se borrarán de forma permanente.
+            </p>
             <br />
             <span className="text-red-500 font-semibold text-xs">
               Esta acción no se puede deshacer.
@@ -928,7 +899,6 @@ export default function GestionCurriculo() {
         }
         confirmText="Sí, eliminar"
       />
-
       <ConfirmModal
         isOpen={!!materiaAEliminar}
         onClose={() => setMateriaAEliminar(null)}
@@ -941,8 +911,7 @@ export default function GestionCurriculo() {
         title={`¿Eliminar ${terminoHijo}?`}
         message={
           <>
-            ¿Estás seguro de eliminar esta {terminoHijo.toLowerCase()}?
-            <br />
+            <p>¿Estás seguro de eliminar esta {terminoHijo.toLowerCase()}?</p>
             <span className="block mt-2 p-2 bg-slate-100 rounded text-xs italic text-slate-600 line-clamp-3">
               "{materiaAEliminar?.descripcion}"
             </span>

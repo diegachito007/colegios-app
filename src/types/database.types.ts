@@ -68,6 +68,7 @@ export interface Database {
             | "inspector";
           status: "pending" | "active" | "blocked" | "rejected" | "deleted";
           cargo_especifico: string | null;
+          area_director: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -86,6 +87,7 @@ export interface Database {
             | "inspector";
           status?: "pending" | "active" | "blocked" | "rejected" | "deleted";
           cargo_especifico?: string | null;
+          area_director?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -104,6 +106,7 @@ export interface Database {
             | "inspector";
           status?: "pending" | "active" | "blocked" | "rejected" | "deleted";
           cargo_especifico?: string | null;
+          area_director?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -649,6 +652,172 @@ export interface Database {
           materia_id?: string;
           horario?: Json;
           created_at?: string | null;
+        };
+      };
+
+      // ✅ NUEVA TABLA: Configuración de Bloques de Evaluación
+      bloques_evaluacion: {
+        Row: {
+          id: string;
+          colegio_id: string;
+          anio_lectivo_id: string;
+          nombre: string;
+          porcentaje: number;
+          orden: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          colegio_id: string;
+          anio_lectivo_id: string;
+          nombre: string;
+          porcentaje: number;
+          orden?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          colegio_id?: string;
+          anio_lectivo_id?: string;
+          nombre?: string;
+          porcentaje?: number;
+          orden?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+
+      // ✅ NUEVA TABLA: Tipos de Actividad
+      tipos_actividad: {
+        Row: {
+          id: string;
+          colegio_id: string;
+          nombre: string;
+          peso: number;
+          activo: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          colegio_id: string;
+          nombre: string;
+          peso?: number;
+          activo?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          colegio_id?: string;
+          nombre?: string;
+          peso?: number;
+          activo?: boolean;
+          created_at?: string;
+        };
+      };
+
+      // ✅ NUEVA TABLA: Actividades
+      actividades: {
+        Row: {
+          id: string;
+          colegio_id: string;
+          anio_lectivo_id: string;
+          periodo_id: string;
+          grado_id: string;
+          materia_id: string;
+          docente_id: string | null;
+          categoria: string; // 'actividad' | 'proyecto' | 'examen'
+          tipo_id: string | null;
+          detalle: string;
+          fecha: string;
+          estrategia_nota: string;
+          dirigida_a: string;
+          estudiante_ids: string[] | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          colegio_id: string;
+          anio_lectivo_id: string;
+          periodo_id: string;
+          grado_id: string;
+          materia_id: string;
+          docente_id?: string | null;
+          categoria: string;
+          tipo_id?: string | null;
+          detalle: string;
+          fecha: string;
+          estrategia_nota?: string;
+          dirigida_a?: string;
+          estudiante_ids?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          colegio_id?: string;
+          anio_lectivo_id?: string;
+          periodo_id?: string;
+          grado_id?: string;
+          materia_id?: string;
+          docente_id?: string | null;
+          categoria?: string;
+          tipo_id?: string | null;
+          detalle?: string;
+          fecha?: string;
+          estrategia_nota?: string;
+          dirigida_a?: string;
+          estudiante_ids?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+
+      // ✅ NUEVA TABLA: Calificaciones
+      calificaciones: {
+        Row: {
+          id: string;
+          actividad_id: string;
+          estudiante_id: string;
+          nota: number;
+          observacion: string | null;
+          refuerzo: Json | null;
+          docente_id: string | null;
+          editado_por: string | null;
+          editado_el: string | null;
+          nota_original: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          actividad_id: string;
+          estudiante_id: string;
+          nota: number;
+          observacion?: string | null;
+          refuerzo?: Json | null;
+          docente_id?: string | null;
+          editado_por?: string | null;
+          editado_el?: string | null;
+          nota_original?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          actividad_id?: string;
+          estudiante_id?: string;
+          nota?: number;
+          observacion?: string | null;
+          refuerzo?: Json | null;
+          docente_id?: string | null;
+          editado_por?: string | null;
+          editado_el?: string | null;
+          nota_original?: number | null;
+          created_at?: string;
+          updated_at?: string;
         };
       };
     };

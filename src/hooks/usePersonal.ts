@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export interface PersonalRow {
   id: string;
@@ -9,10 +9,16 @@ export interface PersonalRow {
   rol: string;
   status: string;
   cargo_especifico: string | null;
+  area_director: string | null;
 }
 
+// ✅ Contador para nombres únicos (GestionPersonal y GestionConfiguracion
+// usan este hook a la vez; con nombre fijo habría colisión de canal)
+let personalChannelSeq = 0;
+
 export const usePersonal = (colegioId: string | null) => {
-  const queryClient = useQueryClient(); // ✅ Necesario para invalidar
+  const queryClient = useQueryClient();
+  const channelIdRef = useRef(`cambios-personal-${++personalChannelSeq}`);
 
   const { data: personal, isLoading } = useQuery<PersonalRow[]>({
     queryKey: ["personal", colegioId],
@@ -33,19 +39,17 @@ export const usePersonal = (colegioId: string | null) => {
   // ✅ MAGIA EN TIEMPO REAL: Escuchamos cambios en la tabla usuarios
   useEffect(() => {
     if (!colegioId) return;
-
     const channel = supabase
-      .channel("cambios-personal")
+      .channel(channelIdRef.current) // ✅ nombre único por componente
       .on(
         "postgres_changes",
         {
-          event: "*", // INSERT, UPDATE, DELETE
+          event: "*",
           schema: "public",
           table: "usuarios",
           filter: `colegio_id=eq.${colegioId}`,
         },
         () => {
-          // Si un docente se activa o cambia su rol, recargamos la tabla
           queryClient.invalidateQueries({ queryKey: ["personal", colegioId] });
         },
       )

@@ -68,45 +68,44 @@ export default function ActivarDocente() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docente) return;
+    if (!docente || !token) return;
 
     if (password !== confirmPassword)
       return setError("Las contraseñas no coinciden.");
-    if (password.length < 6)
-      return setError("La contraseña debe tener al menos 6 caracteres.");
+    
+    if (password.length < 10)
+      return setError("La contraseña debe tener al menos 10 caracteres.");
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      // 1. Crear el usuario en Auth
+      // El servidor valida el token (hash + vencimiento + email) y deriva
+      // colegio, rol y nombre desde la BD. No se envía nada más.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: docente.email,
-        password: password,
+        password,
         options: {
-          data: {
-            display_name: `${docente.nombres} ${docente.apellidos}`,
-            rol: "docente",
-            colegio_id: docente.colegio_id,
-          },
+          data: { token_docente: token },
         },
       });
 
       if (authError) throw authError;
       if (!authData.user) throw new Error("No se pudo crear el usuario.");
 
-      // 2. Quemar el token y vincular el usuario_id
-      // ✅ SOLUCIÓN TYPESCRIPT: 'as never' para actualizar sin error de tipos
-      const { error: updateError } = await supabase
-        .from("docentes")
-        .update({
-          invitacion_aceptada: true,
-          token_invitacion: null,
-          usuario_id: authData.user.id,
-        } as never)
-        .eq("id", docente.docente_id);
+      // Verificar que el trigger creó el perfil (el trigger puede fallar
+      // silenciosamente y signUp no propaga ese error al cliente)
+      const { data: perfil } = await supabase
+        .from("usuarios")
+        .select("id")
+        .eq("id", authData.user.id)
+        .maybeSingle();
 
-      if (updateError) throw updateError;
+      if (!perfil) {
+        throw new Error(
+          "No se pudo vincular tu cuenta. El enlace puede estar vencido o ya usado. Contacta al administrador.",
+        );
+      }
 
       toast.success("¡Cuenta creada exitosamente!");
       setExito(true);
@@ -216,7 +215,7 @@ export default function ActivarDocente() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 10 caracteres"
               />
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
-import { useEsDocente } from "../../hooks/useDocentes"; // ✅ Importación corregida
+import { useEsDocente } from "../../hooks/useDocentes";
+import { useColegios } from "../../hooks/useColegios"; // ✅ Realtime incluido
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -21,8 +22,13 @@ import {
 
 export default function Sidebar() {
   const { profile, signOut } = useAuth();
-  const { esDocente } = useEsDocente(profile?.id || null); // ✅ Hook
+  const { esDocente } = useEsDocente(profile?.id || null);
   const location = useLocation();
+
+  // ✅ Fuente única de verdad + realtime (useColegios invalida en UPDATE de colegios)
+  const { colegios } = useColegios();
+  const miColegio = colegios?.find((c) => c.id === profile?.colegio_id);
+  const nombreColegio = miColegio?.nombre ?? "";
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem("sidebar_collapsed");
@@ -102,7 +108,6 @@ export default function Sidebar() {
     },
   ];
 
-  // ✅ Solo mostramos los ítems de docente si esDocente es true
   const docenteItems = [
     {
       icon: Users,
@@ -122,7 +127,7 @@ export default function Sidebar() {
       path: "/docente/miHorario",
       roles: ["docente", "vicerrector", "inspector", "admin_colegio"],
     },
-  ].filter(() => esDocente); // ✅ Filtro clave
+  ].filter(() => esDocente);
 
   const allItems = [
     ...menuItems,
@@ -130,6 +135,7 @@ export default function Sidebar() {
     ...adminColegioItems,
     ...docenteItems,
   ];
+
   const visibleItems = allItems.filter((item) =>
     item.roles.includes(profile?.rol || ""),
   );
@@ -149,7 +155,9 @@ export default function Sidebar() {
       </button>
 
       <div
-        className={`h-16 flex items-center border-b border-slate-100 ${isCollapsed ? "justify-center px-0" : "px-6"}`}
+        className={`h-16 flex items-center border-b border-slate-100 ${
+          isCollapsed ? "justify-center px-0" : "px-6"
+        }`}
       >
         <h1 className="text-xl font-extrabold text-brand-dark tracking-tight flex items-center gap-2 overflow-hidden whitespace-nowrap">
           <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-blue-600 to-blue-400 flex items-center justify-center text-white shadow-sm">
@@ -163,8 +171,25 @@ export default function Sidebar() {
         </h1>
       </div>
 
+      {/* ✅ NOMBRE DEL COLEGIO (realtime, sin useEffect manual) */}
+      {!isCollapsed && nombreColegio && (
+        <div className="px-4 py-3 bg-blue-50/50 border-b border-slate-100">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            Institución
+          </p>
+          <p
+            className="text-xs font-bold text-brand-blue truncate"
+            title={nombreColegio}
+          >
+            {nombreColegio}
+          </p>
+        </div>
+      )}
+
       <div
-        className={`p-4 border-b border-slate-100 bg-slate-50/50 flex ${isCollapsed ? "justify-center" : "items-center gap-3"}`}
+        className={`p-4 border-b border-slate-100 bg-slate-50/50 flex ${
+          isCollapsed ? "justify-center" : "items-center gap-3"
+        }`}
       >
         <div
           className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-brand-blue shrink-0 border border-blue-200"
@@ -190,10 +215,8 @@ export default function Sidebar() {
             Menú Principal
           </p>
         )}
-
         {visibleItems.map((item) => {
           const isActive = location.pathname === item.path;
-
           return (
             <Link
               key={item.path}

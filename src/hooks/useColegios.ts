@@ -2,13 +2,18 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { colegiosService } from "../services/colegiosService";
 import type { Database } from "../types/database.types";
 import toast from "react-hot-toast";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 
 type ColegioInsert = Database["public"]["Tables"]["colegios"]["Insert"];
 
+// ✅ Contador para nombres de canal ÚNICOS por instancia del hook.
+// Evita el error: "cannot add `postgres_changes` callbacks ... after `subscribe()`"
+let colegiosChannelSeq = 0;
+
 export const useColegios = () => {
   const queryClient = useQueryClient();
+  const channelIdRef = useRef(`colegios-${++colegiosChannelSeq}`);
 
   // 1. Obtener Colegios
   const {
@@ -23,7 +28,7 @@ export const useColegios = () => {
   // 2. ✨ MAGIA EN TIEMPO REAL: Escuchamos cambios en Supabase
   useEffect(() => {
     const channel = supabase
-      .channel("cambios-en-vivo")
+      .channel(channelIdRef.current) // ✅ nombre único por componente
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "colegios" },
